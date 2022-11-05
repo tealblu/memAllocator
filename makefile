@@ -6,3 +6,7 @@ dev:
 
 clean:
 	rm -f *.o *.so
+	rm -f project3.tgz
+
+tar:
+	tar -czvf project3.tgz makefile libmyalloc.c libmyalloc.h README.md

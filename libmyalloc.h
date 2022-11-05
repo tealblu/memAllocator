@@ -1,11 +1,12 @@
 #define _GNU_SOURCE
 #include <fcntl.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <sys/mman.h>
 #include <string.h>
 
 // defines
 #define PAGESIZE 4096
+#define BLOCKSIZE 4096
 
 // functions
 
