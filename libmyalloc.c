@@ -119,8 +119,43 @@ void* malloc(size_t byteNum) {
  * @param ptr Pointer to the memory to free.
  */
 void free(void* ptr) {
-    // free the memory
-    munmap(ptr, BLOCKSIZE);
+    // check if ptr is NULL
+    if (ptr == NULL) {
+        return;
+    }
+
+    //  add the block to the free list
+    *(void**)ptr = freeList;
+
+    //  set freeList to the block
+    freeList = ptr;
+
+    //  set the size of the block
+    *(size_t*)ptr = *(size_t*)((size_t)ptr - sizeof(size_t));
+
+    //  check if the next block is free
+    if (*(void**)((size_t)ptr + *(size_t*)ptr + sizeof(size_t)) == NULL) {
+        //  if so, merge the blocks
+        *(size_t*)ptr += *(size_t*)((size_t)ptr + *(size_t*)ptr + sizeof(size_t)) + sizeof(size_t);
+    }
+
+    //  check if the previous block is free
+    if (*(void**)((size_t)ptr - *(size_t*)((size_t)ptr - sizeof(size_t)) - sizeof(size_t)) == NULL) {
+        //  if so, merge the blocks
+        *(size_t*)((size_t)ptr - *(size_t*)((size_t)ptr - sizeof(size_t)) - sizeof(size_t)) += *(size_t*)ptr + sizeof(size_t);
+    }
+
+    //  check if the block is the last block
+    if ((size_t)ptr + *(size_t*)ptr + sizeof(size_t) == (size_t)freeList) {
+        //  if so, unmap the page
+        munmap(freeList, PAGESIZE);
+
+        //  set freeList to NULL
+        freeList = NULL;
+    }
+
+    //  return
+    return;
 }
 
 /**
