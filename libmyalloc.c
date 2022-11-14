@@ -55,10 +55,8 @@ void* malloc(size_t byteNum) {
         // point block header at memory
         newBlock->data = (void*) newBlock + sizeof(block);
 
-        // set size of block
+        // set up block
         newBlock->size = PAGESIZE - sizeof(block);
-
-        // set next pointer to NULL
         newBlock->next = NULL;
 
         // add block to free list
@@ -67,7 +65,7 @@ void* malloc(size_t byteNum) {
         // divide remainder of page into blocks of appropriate size
         int numBlocks = (PAGESIZE - sizeof(block)) / (int) pow(2, index + 1);
 
-        // for each block:
+        // for each block:z
         for(int i = 0; i < numBlocks; i++) {
             // make a new chunk of memory of appropriate size
             block* newChunk = (void*) newBlock + (int) pow(2, index + 1);
@@ -99,11 +97,6 @@ void* malloc(size_t byteNum) {
 
         // remove block from free list
         freeLists[index] = freeLists[index]->next;
-
-        // bring result->next to front of free list
-        freeLists[index] = result->next;
-
-        // set result->next to NULL
         result->next = NULL;
 
         // return pointer to allocated memory
