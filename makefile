@@ -12,7 +12,7 @@ tar:
 	tar -czvf project3.tgz makefile libmyalloc.c libmyalloc.h README.md
 
 test:
-	gcc test.c -o test
+	gcc -g test.c libmyalloc.c -o test
 
 runtest:
 	LD_PRELOAD=./libmyalloc.so ./test 1

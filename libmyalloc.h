@@ -10,6 +10,13 @@
 #define PAGESIZE 4096
 #define BLOCKSIZE 4096
 
+// structs
+typedef struct block {
+    void* data;
+    size_t size;
+    struct block* next;
+} block;
+
 // functions
 
 /**

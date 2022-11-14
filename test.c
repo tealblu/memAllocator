@@ -3,16 +3,18 @@
 
 #include "libmyalloc.h"
 
-int main(int argc, char** argv) {
-    test_malloc_1(argv[1]);
+int main(void) {
+    test_malloc_1();
 }
 
-void test_malloc_1(size_t size) {
-    void *result = malloc(size);
+void test_malloc_1() {
+    // test malloc
+    void *result = malloc(10);
 
     if(result == NULL) {
         printf("malloc failed\n");
     } else {
         printf("malloc succeeded\n");
     }
+
 }

@@ -2,12 +2,6 @@
 
 #include "libmyalloc.h"
 
-typedef struct {
-    int size;
-    void* data;
-    block* next;
-} block;
-
 // global variables
 
 // free lists, segregated by powers of 2 from 2 to 1024
@@ -34,10 +28,8 @@ void* malloc(size_t byteNum) {
     if(index > 9) {
         // allocate memory
         void* result = mmap(NULL, byteNum, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-        // if mmap fails, return NULL
         if(result == MAP_FAILED) {
-            return NULL;
+            //return NULL;
         }
 
         // return pointer to allocated memory
@@ -49,7 +41,7 @@ void* malloc(size_t byteNum) {
         // make a block of the appropriate size
         block* newBlock = mmap(NULL, PAGESIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if(newBlock == MAP_FAILED) {
-            return NULL;
+            //return NULL;
         }
 
         // point block header at memory
@@ -69,8 +61,6 @@ void* malloc(size_t byteNum) {
         for(int i = 0; i < numBlocks; i++) {
             // make a new chunk of memory of appropriate size
             block* newChunk = (void*) newBlock + (int) pow(2, index + 1);
-
-            // point chunk header at memory
             newChunk->data = (void*) newChunk + sizeof(block);
 
             // set size of chunk
@@ -79,10 +69,8 @@ void* malloc(size_t byteNum) {
             // set next pointer to NULL
             newChunk->next = NULL;
 
-            // set next pointer of first chunk in list to new chunk
+            // add chunk to front of list
             freeLists[index]->next = newChunk;
-
-            // set new chunk as first chunk in list
             freeLists[index] = newChunk;
         }
 
@@ -96,7 +84,13 @@ void* malloc(size_t byteNum) {
         block* result = freeLists[index];
 
         // remove block from free list
-        freeLists[index] = freeLists[index]->next;
+        if(freeLists[index]->next != NULL) {
+            freeLists[index] = freeLists[index]->next;
+        }
+        else {
+            freeLists[index] = NULL;
+        }
+
         result->next = NULL;
 
         // return pointer to allocated memory
@@ -105,13 +99,77 @@ void* malloc(size_t byteNum) {
 }
 
 /**
+ * @brief helper function for free
+ * 
+ * @param ptr Pointer to memory to free.
+ */
+size_t find_size(void* ptr) {
+    if(ptr == NULL) {
+        return 0;
+    }
+
+    // find size of block
+    size_t size = 0;
+    for(int i = 0; i < 10; i++) {
+        block* current = freeLists[i];
+        while(current != NULL && current->next != NULL) {
+            if(current->data == ptr) {
+                size = current->size;
+                break;
+            }
+            current = current->next;
+        }
+    }
+
+    // find size of block that doesn't have a free list
+    if(size == 0) {
+        size = (size_t) ptr - (size_t) mmap(NULL, PAGESIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    }
+
+    return size;
+}
+
+/**
  * @brief Frees memory.
  * 
  * @param ptr Pointer to the memory to free.
  */
 void free(void* ptr) {
-    // find out object's size
-    
+    // find size of chunk
+    size_t size = find_size(ptr);
+
+    // generate index of appropriate free list (log2(byteNum) - log2(2))
+    int index = (int) log2(size) - 1;
+
+    // if index is out of bounds, return NULL
+    if(index < 0) {
+        return;
+    }
+
+    // if index > 9, don't use free list
+    if(index > 9) {
+        // free memory
+        munmap(ptr, size);
+        return;
+    }
+
+    // round size down to nearest power of 2
+    size = (int) pow(2, index + 1);
+
+    // add the chunk to the appropriate free list
+    block* newChunk = (void*) ptr - sizeof(block);
+    newChunk->size = size - sizeof(block);
+    newChunk->next = freeLists[index];
+    freeLists[index] = newChunk;
+
+    // if the free list is too big, free the page
+    if(freeLists[index]->size > PAGESIZE) {
+        // free page
+        munmap(freeLists[index], PAGESIZE);
+
+        // set free list to NULL
+        freeLists[index] = NULL;
+    }
 }
 
 /**
