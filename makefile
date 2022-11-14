@@ -10,3 +10,9 @@ clean:
 
 tar:
 	tar -czvf project3.tgz makefile libmyalloc.c libmyalloc.h README.md
+
+test:
+	gcc test.c -o test
+
+runtest:
+	LD_PRELOAD=./libmyalloc.so ./test 1

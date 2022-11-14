@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 // defines
 #define PAGESIZE 4096

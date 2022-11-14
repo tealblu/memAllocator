@@ -27,6 +27,7 @@ void* malloc(size_t byteNum) {
 
     //  check if byteNum is greater than 2^32
     if (byteNum > 4294967296) {
+
         return NULL;
     }
 
