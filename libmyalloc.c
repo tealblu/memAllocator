@@ -99,47 +99,31 @@ void* malloc(size_t byteNum) {
 }
 
 /**
- * @brief helper function for free
- * 
- * @param ptr Pointer to memory to free.
- */
-size_t find_size(void* ptr) {
-    if(ptr == NULL) {
-        return 0;
-    }
-
-    // find size of block
-    size_t size = 0;
-    for(int i = 0; i < 10; i++) {
-        block* current = freeLists[i];
-        while(current != NULL && current->next != NULL) {
-            if(current->data == ptr) {
-                size = current->size;
-                break;
-            }
-            current = current->next;
-        }
-    }
-
-    // find size of block that doesn't have a free list
-    if(size == 0) {
-        size = (size_t) ptr - (size_t) mmap(NULL, PAGESIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    }
-
-    return size;
-}
-
-/**
  * @brief Frees memory.
  * 
  * @param ptr Pointer to the memory to free.
  */
 void free(void* ptr) {
-    // find size of chunk
-    size_t size = find_size(ptr);
+    // find size of chunk, if it is in free list
+    int size = 0;
+    int index = 0;
+    for(int i = 0; i < 10; i++) {
+        if(freeLists[i] != NULL) {
+            if(freeLists[i]->data == ptr) {
+                size = freeLists[i]->size;
+                index = i;
+                break;
+            }
+        }
+    }
+
+    // if chunk is not in free list, size == round up to next power of 2
+    if(size == 0) {
+        size = (int) pow(2, ceil(log2((int) ptr - (int) ptr % PAGESIZE + PAGESIZE - (int) ptr)));
+    }
 
     // generate index of appropriate free list (log2(byteNum) - log2(2))
-    int index = (int) log2(size) - 1;
+    index = (int) log2(size) - 1;
 
     // if index is out of bounds, return NULL
     if(index < 0) {
