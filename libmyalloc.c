@@ -4,7 +4,7 @@
 
 // global variables
 
-// free lists, segregated by powers of 2 from 2 to 1024
+// free lists, segregated by powers of 2 from 2 to 1024 (10 lists)
 block* freeLists[10];
 
 // functions

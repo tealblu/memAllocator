@@ -9,7 +9,7 @@ int main(void) {
 
 void test_malloc_1() {
     // test malloc
-    void *result = malloc(0);
+    void *result = malloc(512);
 
     if(result == NULL) {
         printf("malloc failed\n");

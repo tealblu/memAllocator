@@ -1,8 +1,8 @@
 fast:
-	gcc -O2 -DNDEBUG -Wall -fPIC -shared libmyalloc.c -o libmyalloc.so
+	gcc -O2 -DNDEBUG -Wall -fPIC -shared libmyalloc.c -lm -o libmyalloc.so
 
 dev:
-	gcc -g -Wall -fPIC -shared libmyalloc.c -o libmyalloc.so
+	gcc -g -Wall -fPIC -shared libmyalloc.c -lm -o libmyalloc.so
 
 clean:
 	rm -f *.o *.so
@@ -12,7 +12,7 @@ tar:
 	tar -czvf project3.tgz makefile libmyalloc.c libmyalloc.h README.md
 
 test:
-	gcc -g test.c libmyalloc.c -lm -o test
+	gcc -g test.c -lm -o test
 
 runtest:
 	LD_PRELOAD=./libmyalloc.so ./test
