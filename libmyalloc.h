@@ -17,7 +17,7 @@ typedef struct block {
 } block;
 
 typedef struct page {
-    block* data; // pointer to first block in page
+    void* data; // pointer to first block in page
     size_t size; // size of chunk of memory
 } page;
 

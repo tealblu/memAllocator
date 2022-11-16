@@ -158,15 +158,12 @@ void free(void* ptr) {
 
     // if chunk is not in free list, size == round up to next power of 2
     if(inPage == 0) {
-        // get size of chunk
-        int chunkSize = 0;
-        while(ptr + chunkSize != NULL) {
-            chunkSize++;
-        }
+        // figure out size of allocated memory outside free lists
+        int size = (int) pow(2, (int) log2((intptr_t) ptr) + 1);
 
         // round up to next power of 2
         int roundedSize = 1;
-        while(roundedSize < chunkSize) {
+        while(roundedSize < size) {
             roundedSize *= 2;
         }
 
