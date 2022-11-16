@@ -4,20 +4,26 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
+#include <stdint.h>
 
 // defines
 #define PAGESIZE 4096
-#define BLOCKSIZE 4096
 
 // structs
 typedef struct block {
-    void* data;
-    size_t size;
-    struct block* next;
+    void* data; // pointer to chunk of memory
+    size_t size; // size of chunk of memory
+    struct block* next; // pointer to next block in free list
 } block;
 
+typedef struct page {
+    void* data; // pointer to first block in page
+    size_t size; // size of chunk of memory
+} page;
+
 // functions
+void __attribute__ ((constructor)) lib_start();
+void __attribute__ ((destructor)) lib_kill();
 
 /**
  * @brief Allocates memory.

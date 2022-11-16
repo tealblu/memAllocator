@@ -2,6 +2,7 @@
 
 
 #include "libmyalloc.h"
+#include <stdio.h>
 
 int main(void) {
     test_malloc_1();
