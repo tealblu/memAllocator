@@ -54,10 +54,9 @@ void* malloc(size_t byteNum) {
     // if size of free list at index is 0:
     if(freeLists[index] == NULL) {
         // make a page of the appropriate size
-        page* newPage;
-        newPage->size = PAGESIZE - sizeof(page); // size of page minus size of page struct
-        newPage->data = mmap(NULL, PAGESIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if(newPage->data == MAP_FAILED) {
+        page* newPage = mmap(NULL, PAGESIZE + sizeof(page), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        newPage->size = (int) pow(2, index + 1);
+        if(newPage == MAP_FAILED) {
             return NULL;
         }
 
@@ -70,7 +69,7 @@ void* malloc(size_t byteNum) {
         // for each block:
         for(int i = 0; i < numBlocks; i++) {
             // make a new block of memory in the page, offset by size of page struct and size of previous blocks
-            block* newBlock;
+            block* newBlock = (block*) ((char*) newPage + sizeof(page) + (i * newPage->size));
             newBlock->size = (int) pow(2, index + 1);
             newBlock->data = newPage->data + sizeof(page) + (i * newBlock->size);
             newBlock->next = NULL;
