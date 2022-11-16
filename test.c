@@ -1,15 +1,15 @@
-// A simple test file for the library
-
-
+#include <stdio.h>
 #include "libmyalloc.h"
 
 int main(void) {
+    puts("entering test 1");
     test_malloc_1();
 }
 
 void test_malloc_1() {
     // test malloc
-    void *result = malloc(512);
+    puts("attempting to allocate 100 bytes");
+    void *result = malloc(100);
 
     if(result == NULL) {
         printf("malloc failed\n");
@@ -27,7 +27,7 @@ void test_malloc_1() {
     }
 
     // test realloc
-    result = realloc(result, 0);
+    result = realloc(result, 512);
 
     if(result == NULL) {
         printf("realloc failed\n");
@@ -36,7 +36,7 @@ void test_malloc_1() {
     }
 
     // test calloc
-    result = calloc(0);
+    result = calloc(512);
 
     if(result == NULL) {
         printf("calloc failed\n");
