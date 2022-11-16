@@ -1,11 +1,28 @@
 // headers
-
 #include "libmyalloc.h"
 
 // global variables
-static void* freeList = NULL; // pointer to the free list
+
+// free lists, segregated by powers of 2 from 2 to 1024 (10 lists)
+page* freeLists[10];
 
 // functions
+void __attribute__ ((constructor)) lib_start() {
+    // initialize free lists
+    for(int i = 0; i < 10; i++) {
+        freeLists[i] = NULL;
+    }
+}
+
+void __attribute__ ((destructor)) lib_kill() {
+    // free all pages
+    for(int i = 0; i < 10; i++) {
+        page* currPage = freeLists[i];
+        if (currPage != NULL) {
+            munmap(currPage, PAGESIZE);
+        }
+    }
+}
 
 /**
  * @brief Allocates memory. Uses Big Bag of Pages (BBOP) style allocation. Uses segregated free list. Free list segregated in powers of 2.
@@ -14,103 +31,75 @@ static void* freeList = NULL; // pointer to the free list
  * @return void* Pointer to the allocated memory.
  */
 void* malloc(size_t byteNum) {
-    //  check if byteNum is 0
-    if (byteNum == 0) {
+    // generate index of appropriate block list (log2(byteNum) - log2(2))
+    int index = (int) log2(byteNum) - 1;
+
+    // if index is out of bounds, return NULL
+    if(index < 0) {
         return NULL;
     }
 
-    //  check if byteNum is a power of 2
-    if ((byteNum & (byteNum - 1)) != 0) {
-        //  if not, round up to the next power of 2
-        byteNum = pow(2, ceil(log2(byteNum)));
-    }
-
-    //  check if byteNum is greater than 2^32
-    if (byteNum > 4294967296) {
-
-        return NULL;
-    }
-
-    // allocate memory
-    void* ptr = NULL;
-
-    //  check if freeList is NULL
-    if (freeList == NULL) {
-        // if so, allocate a new page
-        freeList = mmap(NULL, PAGESIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-        //  check if mmap failed
-        if (freeList == MAP_FAILED) {
+    // if index > 9, don't use free list
+    if(index > 9) {
+        // allocate memory
+        void* result = mmap(NULL, byteNum, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if(result == MAP_FAILED) {
             return NULL;
         }
 
-        // allocate blocks
-        int blockNum = PAGESIZE / BLOCKSIZE;
-        int i;
-        for (i = 0; i < blockNum; i++) {
-            //  check if this is the last block
-            if (i == blockNum - 1) {
-                // if so, set the next pointer to NULL
-                *((void**)freeList + i) = NULL;
+        // return pointer to allocated memory
+        return result;
+    }
+
+    // if size of free list at index is 0:
+    if(freeLists[index] == NULL) {
+        // make a page of the appropriate size
+        page* newPage = mmap(NULL, PAGESIZE + sizeof(page), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        newPage->size = (int) pow(2, index + 1);
+        if(newPage == MAP_FAILED) {
+            return NULL;
+        }
+
+        // add page to free list
+        freeLists[index] = newPage;
+
+        // divide remainder of page into blocks of appropriate size
+        int numBlocks = (PAGESIZE - sizeof(page)) / (int) pow(2, index + 1);
+
+        // for each block:
+        for(int i = 0; i < numBlocks; i++) {
+            // make a new block of memory in the page, offset by size of page struct and size of previous blocks
+            block* newBlock = (block*) ((char*) newPage + sizeof(page) + (i * newPage->size));
+            newBlock->size = (int) pow(2, index + 1);
+            newBlock->data = newPage->data + sizeof(page) + (i * newBlock->size);
+            newBlock->next = NULL;
+
+            // check if block is the first block in the page
+            if(i == 0) {
+                // if so, set page's data to point to block
+                newPage->data = newBlock;
             } else {
-                // if not, set the next pointer to the next block
-                *((void**)freeList + i) = freeList + (i + 1) * BLOCKSIZE;
+                // if not, set previous block's next to point to block
+                block* prevBlock = newPage->data + sizeof(page) + ((i - 1) * newBlock->size);
+                prevBlock->next = newBlock;
             }
         }
 
-        //  set ptr to the first block
-        ptr = freeList;
+        // return pointer to allocated memory
+        return newPage->data;
+    }
 
-        //  set freeList to the second block
-        freeList = *((void**)freeList);
+    // if size of free list at index is not 0:
+    else {
+        // get first block from free list
+        block* result = freeLists[index]->data;
 
-        //  set the next pointer of the first block to NULL
-        *((void**)ptr) = NULL;
+        // remove block from free list
+        freeLists[index]->data = result->next;
+        result->next = NULL;
 
-        //  return ptr
-        return ptr;
-    } else {
-        // if not, check if there is a free block of the correct size
-        void* curr = freeList;
-        void* prev = NULL;
-
-        //  loop through the free list
-        while (curr != NULL) {
-            //  check if the current block is the correct size
-            if (byteNum == *(size_t*)curr) {
-                //  if so, remove the block from the free list
-                if (prev == NULL) {
-                    freeList = *(void**)curr;
-                } else {
-                    *(void**)prev = *(void**)curr;
-                }
-
-                //  return the block
-                return (void*)((size_t)curr + sizeof(size_t));
-            }
-
-            //  check if the current block is larger than the correct size
-            if (byteNum < *(size_t*)curr) {
-                //  if so, split the block
-                void* newBlock = (void*)((size_t)curr + byteNum + sizeof(size_t));
-                *(size_t*)newBlock = *(size_t*)curr - byteNum - sizeof(size_t);
-                *(void**)newBlock = *(void**)curr;
-
-                //  remove the block from the free list
-                if (prev == NULL) {
-                    freeList = *(void**)curr;
-                } else {
-                    *(void**)prev = *(void**)curr;
-                }
-
-                //  return the block
-                return (void*)((size_t)curr + sizeof(size_t));
-            }
-
-            //  move to the next block
-            prev = curr;
-            curr = *(void**)curr;
-        }
+        // return pointer to allocated memory
+        return result->data;
     }
 }
 
@@ -120,43 +109,66 @@ void* malloc(size_t byteNum) {
  * @param ptr Pointer to the memory to free.
  */
 void free(void* ptr) {
-    // check if ptr is NULL
-    if (ptr == NULL) {
-        return;
+    // figure out if ptr is in a page
+    int inPage = 0; // <- used later
+    for(int i = 0; i < 10; i++) {
+        if(freeLists[i] != NULL) {
+            // if ptr is above the page start and below the page end:
+            if((intptr_t) ptr >= (intptr_t) freeLists[i]->data && (intptr_t) ptr < (intptr_t) freeLists[i]->data + freeLists[i]->size) {
+                inPage = 1;
+
+                // get block size
+                int blockSize = (int) pow(2, i + 1);
+
+                // get block index from pointer arithmetic
+                int blockIndex = ((intptr_t) ptr - (intptr_t) freeLists[i]->data) / blockSize;
+
+                // get block
+                block* freeBlock = freeLists[i]->data + (blockIndex * blockSize);
+
+                // add block to front of free list
+                freeBlock->next = freeLists[i]->data;
+                freeLists[i]->data = freeBlock;
+
+                // free page if all blocks are free
+                int allFree = 1;
+                for(int j = 0; j < freeLists[i]->size / blockSize; j++) {
+                    block* checkBlock = freeLists[i]->data + (j * blockSize);
+                    if(checkBlock->next != NULL) {
+                        allFree = 0;
+                        break;
+                    }
+                }
+
+                // if all blocks are free:
+                if(allFree == 1) {
+                    // free page
+                    munmap(freeLists[i]->data, PAGESIZE);
+
+                    // remove page from free list
+                    freeLists[i] = NULL;
+                }
+
+                // break out of loop
+                break;
+            }
+        }
     }
 
-    //  add the block to the free list
-    *(void**)ptr = freeList;
+    // if chunk is not in free list, size == round up to next power of 2
+    if(inPage == 0) {
+        // figure out size of allocated memory outside free lists
+        int size = (int) pow(2, (int) log2((intptr_t) ptr) + 1);
 
-    //  set freeList to the block
-    freeList = ptr;
+        // round up to next power of 2
+        int roundedSize = 1;
+        while(roundedSize < size) {
+            roundedSize *= 2;
+        }
 
-    //  set the size of the block
-    *(size_t*)ptr = *(size_t*)((size_t)ptr - sizeof(size_t));
-
-    //  check if the next block is free
-    if (*(void**)((size_t)ptr + *(size_t*)ptr + sizeof(size_t)) == NULL) {
-        //  if so, merge the blocks
-        *(size_t*)ptr += *(size_t*)((size_t)ptr + *(size_t*)ptr + sizeof(size_t)) + sizeof(size_t);
+        // free chunk
+        munmap(ptr, roundedSize);
     }
-
-    //  check if the previous block is free
-    if (*(void**)((size_t)ptr - *(size_t*)((size_t)ptr - sizeof(size_t)) - sizeof(size_t)) == NULL) {
-        //  if so, merge the blocks
-        *(size_t*)((size_t)ptr - *(size_t*)((size_t)ptr - sizeof(size_t)) - sizeof(size_t)) += *(size_t*)ptr + sizeof(size_t);
-    }
-
-    //  check if the block is the last block
-    if ((size_t)ptr + *(size_t*)ptr + sizeof(size_t) == (size_t)freeList) {
-        //  if so, unmap the page
-        munmap(freeList, PAGESIZE);
-
-        //  set freeList to NULL
-        freeList = NULL;
-    }
-
-    //  return
-    return;
 }
 
 /**
