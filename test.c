@@ -35,6 +35,8 @@ void test_malloc_1() {
         printf("realloc succeeded\n");
     }
 
+    free(result);
+
     // test calloc
     result = calloc(512);
 
