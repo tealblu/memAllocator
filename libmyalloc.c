@@ -57,6 +57,7 @@ void* malloc(size_t byteNum) {
         page* newPage = mmap(NULL, PAGESIZE + sizeof(page), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         newPage->size = (int) pow(2, index + 1);
         newPage->next = NULL;
+        newPage->data = (block*) ((void*) newPage + sizeof(page));
         if(newPage == MAP_FAILED) {
             return NULL;
         }
@@ -70,7 +71,7 @@ void* malloc(size_t byteNum) {
         // for each block:
         for(int i = 0; i < numBlocks; i++) {
             // make a new block of memory in the page, offset by size of page struct and size of previous blocks
-            block* newBlock = (block*) ((char*) newPage + sizeof(page) + (i * newPage->size));
+            block* newBlock = (block*) ((void*) newPage + sizeof(page) + (i * (int) pow(2, index + 1)));
             newBlock->size = (int) pow(2, index + 1);
             newBlock->data = newPage->data + sizeof(page) + (i * newBlock->size);
             newBlock->next = NULL;
@@ -81,13 +82,13 @@ void* malloc(size_t byteNum) {
                 newPage->data = newBlock;
             } else {
                 // if not, set previous block's next to point to block
-                block* prevBlock = newPage->data + sizeof(page) + ((i - 1) * newBlock->size);
+                block* prevBlock = (block*) ((void*) newPage + sizeof(page) + ((i - 1) * (int) pow(2, index + 1)));
                 prevBlock->next = newBlock;
             }
         }
 
         // return pointer to allocated memory
-        return newPage->data;
+        return newPage->data->data;
     }
 
     // if a page exists and has a free block, use it
@@ -112,7 +113,7 @@ void* malloc(size_t byteNum) {
     else if (freeLists[index] != NULL && freeLists[index]->data == NULL) {
         // make a page of the appropriate size
         page* newPage = mmap(NULL, PAGESIZE + sizeof(page), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        newPage->size = (int) pow(2, index + 1);
+        newPage->size = PAGESIZE + sizeof(page);
         newPage->next = NULL;
         if(newPage == MAP_FAILED) {
             return NULL;
@@ -150,7 +151,7 @@ void* malloc(size_t byteNum) {
         }
 
         // return pointer to allocated memory
-        return newPage->data;
+        return newPage->data->data;
     }
 
     // if size of free list at index is not 0:
@@ -173,46 +174,78 @@ void* malloc(size_t byteNum) {
  * @param ptr Pointer to the memory to free.
  */
 void free(void* ptr) {
+    // check if pointer is NULL
+    if(ptr == NULL) {
+        return;
+    }
+
     // figure out if ptr is in a page
     int inPage = 0; // <- used later
     for(int i = 0; i < 10; i++) {
+        // if free list is empty, skip
         if(freeLists[i] != NULL) {
             // get the page ptr is in
             page* currPage = freeLists[i];
             while(currPage != NULL) {
                 // check if ptr is in page
-                if((char*) ptr >= (char*) currPage && (char*) ptr < (char*) currPage + PAGESIZE) {
+                if((intptr_t*) ptr >= (intptr_t*) currPage && (intptr_t*) ptr < (intptr_t*) currPage + PAGESIZE) {
                     // if so, set inPage to 1
                     inPage = 1;
                     break;
+                } else {
+                    // check if next page exists
+                    if(currPage->next != NULL) {
+                        // if so, set currPage to next page
+                        currPage = currPage->next;
+                    } else {
+                        // if not, break
+                        break;
+                    }
                 }
-
-                // move to next page
-                currPage = currPage->next;
             }
 
             // if ptr is in currPage:
             if(inPage == 1) {
-                // get block size
-                int blockSize = (int) pow(2, i + 1);
-
-                // get block index from pointer arithmetic
-                int blockIndex = ((intptr_t) ptr - (intptr_t) freeLists[i]->data) / blockSize;
-
-                // get block
-                block* freeBlock = freeLists[i]->data + (blockIndex * blockSize);
-
-                // add block to front of free list
-                freeBlock->next = freeLists[i]->data;
-                freeLists[i]->data = freeBlock;
-
-                // free page if all blocks are free
-                int allFree = 1;
-                for(int j = 0; j < freeLists[i]->size / blockSize; j++) {
-                    block* checkBlock = freeLists[i]->data + (j * blockSize);
-                    if(checkBlock->next != NULL) {
+                // iteratively find the block ptr is in
+                block* currBlock = currPage->data;
+                currBlock->next = NULL;
+                while(currBlock != NULL) {
+                    // check if ptr is in block
+                    if((intptr_t*) ptr >= (intptr_t*) currBlock && (intptr_t*) ptr < (intptr_t*) currBlock + currBlock->size) {
+                        // if so, add block to free list
+                        currBlock->next = currPage->data;
+                        currPage->data = currBlock;
+                        break;
+                    } else {
+                        // check if next block exists
+                        if(currBlock->next != NULL) {
+                            // if so, set currBlock to next block
+                            currBlock = currBlock->next;
+                        } else {
+                            // if not, break
+                            break;
+                        }
+                    }
+                }
+                
+                // check if all blocks are free
+                int allFree = 1; // <- used later
+                block* currBlock2 = currPage->data;
+                while(currBlock2 != NULL) {
+                    // check if block is free
+                    if(currBlock2->data != NULL) {
+                        // if not, set allFree to 0
                         allFree = 0;
                         break;
+                    } else {
+                        // check if next block exists
+                        if(currBlock2->next != NULL) {
+                            // if so, set currBlock2 to next block
+                            currBlock2 = currBlock2->next;
+                        } else {
+                            // if not, break
+                            break;
+                        }
                     }
                 }
 

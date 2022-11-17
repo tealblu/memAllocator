@@ -8,6 +8,7 @@
 
 // defines
 #define PAGESIZE 4096
+#define SEGMENTNUM 10
 
 // structs
 typedef struct block {
@@ -17,7 +18,7 @@ typedef struct block {
 } block;
 
 typedef struct page {
-    void* data; // pointer to first block in page
+    block* data; // pointer to first block in page
     size_t size; // size of chunk of memory
     struct page* next; // pointer to next page in free list
 } page;
