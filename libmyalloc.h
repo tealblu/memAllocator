@@ -19,6 +19,7 @@ typedef struct block {
 typedef struct page {
     void* data; // pointer to first block in page
     size_t size; // size of chunk of memory
+    struct page* next; // pointer to next page in free list
 } page;
 
 // functions
