@@ -87,8 +87,12 @@ void* malloc(size_t byteNum) {
             }
         }
 
+        // remove first block from free list
+        block* result = newPage->data;
+        newPage->data = newPage->data->next;
+
         // return pointer to allocated memory
-        return newPage->data->data;
+        return result->data;
     }
 
     // if a page exists and has a free block, use it
@@ -100,13 +104,19 @@ void* malloc(size_t byteNum) {
         }
 
         // get first free block in page
-        block* currBlock = currPage->data;
+        block* result = currPage->data;
 
-        // remove block from free list
-        currPage->data = currBlock->next;
+        // ensure block is not only block in page
+        if(result->next != NULL) {
+            // remove block from free list
+            currPage->data = result->next;
+        } else {
+            // set page's data to NULL
+            currPage->data = NULL;
+        }
 
         // return pointer to allocated memory
-        return currBlock->data;
+        return result->data;
     }
 
     // if a page exists but has no free blocks, create a new page
@@ -150,8 +160,12 @@ void* malloc(size_t byteNum) {
             }
         }
 
+        // remove first block from free list
+        block* result = newPage->data;
+        newPage->data = newPage->data->next;
+
         // return pointer to allocated memory
-        return newPage->data->data;
+        return result->data;
     }
 
     // if size of free list at index is not 0:
@@ -257,14 +271,15 @@ void free(void* ptr) {
                         munmap(freeLists[i], PAGESIZE + sizeof(page));
                         freeLists[i] = NULL;
                     } else {
-                        // figure out previous page
+                        // if page is not the only page in the free list:
+                        // find page before currPage
                         page* prevPage = freeLists[i];
-                        while(prevPage->next != currPage && prevPage != currPage) {
+                        while(prevPage->next != currPage) {
                             prevPage = prevPage->next;
                         }
 
                         // remove page from free list
-                        prevPage->next = NULL;
+                        prevPage->next = currPage->next;
 
                         // free page
                         munmap(currPage, PAGESIZE + sizeof(page));
