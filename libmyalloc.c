@@ -51,17 +51,81 @@ void* malloc(size_t byteNum) {
         return result;
     }
 
-    // if size of free list at index is 0:
+    // if no page exists, create one
     if(freeLists[index] == NULL) {
         // make a page of the appropriate size
         page* newPage = mmap(NULL, PAGESIZE + sizeof(page), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         newPage->size = (int) pow(2, index + 1);
+        newPage->next = NULL;
         if(newPage == MAP_FAILED) {
             return NULL;
         }
 
         // add page to free list
         freeLists[index] = newPage;
+
+        // divide remainder of page into blocks of appropriate size
+        int numBlocks = (PAGESIZE - sizeof(page)) / (int) pow(2, index + 1);
+
+        // for each block:
+        for(int i = 0; i < numBlocks; i++) {
+            // make a new block of memory in the page, offset by size of page struct and size of previous blocks
+            block* newBlock = (block*) ((char*) newPage + sizeof(page) + (i * newPage->size));
+            newBlock->size = (int) pow(2, index + 1);
+            newBlock->data = newPage->data + sizeof(page) + (i * newBlock->size);
+            newBlock->next = NULL;
+
+            // check if block is the first block in the page
+            if(i == 0) {
+                // if so, set page's data to point to block
+                newPage->data = newBlock;
+            } else {
+                // if not, set previous block's next to point to block
+                block* prevBlock = newPage->data + sizeof(page) + ((i - 1) * newBlock->size);
+                prevBlock->next = newBlock;
+            }
+        }
+
+        // return pointer to allocated memory
+        return newPage->data;
+    }
+
+    // if a page exists and has a free block, use it
+    else if(freeLists[index] != NULL) {
+        // get last page in free list
+        page* currPage = freeLists[index];
+        while(currPage->next != NULL) {
+            currPage = currPage->next;
+        }
+
+        // get first free block in page
+        block* currBlock = currPage->data;
+
+        // remove block from free list
+        currPage->data = currBlock->next;
+
+        // return pointer to allocated memory
+        return currBlock->data;
+    }
+
+    // if a page exists but has no free blocks, create a new page
+    else if (freeLists[index] != NULL && freeLists[index]->data == NULL) {
+        // make a page of the appropriate size
+        page* newPage = mmap(NULL, PAGESIZE + sizeof(page), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        newPage->size = (int) pow(2, index + 1);
+        newPage->next = NULL;
+        if(newPage == MAP_FAILED) {
+            return NULL;
+        }
+
+        // find last page in free list
+        page* currPage = freeLists[index];
+        while(currPage->next != NULL) {
+            currPage = currPage->next;
+        }
+
+        // add page to free list
+        currPage->next = newPage;
 
         // divide remainder of page into blocks of appropriate size
         int numBlocks = (PAGESIZE - sizeof(page)) / (int) pow(2, index + 1);
@@ -113,10 +177,22 @@ void free(void* ptr) {
     int inPage = 0; // <- used later
     for(int i = 0; i < 10; i++) {
         if(freeLists[i] != NULL) {
-            // if ptr is above the page start and below the page end:
-            if((intptr_t) ptr >= (intptr_t) freeLists[i]->data && (intptr_t) ptr < (intptr_t) freeLists[i]->data + freeLists[i]->size) {
-                inPage = 1;
+            // get the page ptr is in
+            page* currPage = freeLists[i];
+            while(currPage != NULL) {
+                // check if ptr is in page
+                if((char*) ptr >= (char*) currPage && (char*) ptr < (char*) currPage + PAGESIZE) {
+                    // if so, set inPage to 1
+                    inPage = 1;
+                    break;
+                }
 
+                // move to next page
+                currPage = currPage->next;
+            }
+
+            // if ptr is in currPage:
+            if(inPage == 1) {
                 // get block size
                 int blockSize = (int) pow(2, i + 1);
 
@@ -142,11 +218,24 @@ void free(void* ptr) {
 
                 // if all blocks are free:
                 if(allFree == 1) {
-                    // free page
-                    munmap(freeLists[i]->data, PAGESIZE);
+                    // if page is the only page in the free list:
+                    if(freeLists[i]->next == NULL) {
+                        // free page
+                        munmap(freeLists[i], PAGESIZE + sizeof(page));
+                        freeLists[i] = NULL;
+                    } else {
+                        // figure out previous page
+                        page* prevPage = freeLists[i];
+                        while(prevPage->next != currPage && prevPage != currPage) {
+                            prevPage = prevPage->next;
+                        }
 
-                    // remove page from free list
-                    freeLists[i] = NULL;
+                        // remove page from free list
+                        prevPage->next = NULL;
+
+                        // free page
+                        munmap(currPage, PAGESIZE + sizeof(page));
+                    }
                 }
 
                 // break out of loop
@@ -155,9 +244,10 @@ void free(void* ptr) {
         }
     }
 
-    // if chunk is not in free list, size == round up to next power of 2
+    // if ptr is not in a page:
     if(inPage == 0) {
-        // figure out size of allocated memory outside free lists
+        // i don't think this works:
+        // figure out size of allocated memory using pointer arithmetic
         int size = (int) pow(2, (int) log2((intptr_t) ptr) + 1);
 
         // round up to next power of 2
